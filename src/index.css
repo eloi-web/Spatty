@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #1B1B1B;
+  --color-brand-neutral: #FFFFFF;
+  --color-brand-accent: #DFFF00;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  
+  --radius-xl: 1.5rem;
+  
+  --shadow-float: 0 10px 40px rgba(0, 0, 0, 0.04);
+  --shadow-active: 0 15px 50px rgba(0, 0, 0, 0.08);
+  --shadow-neon: 0 0 15px rgba(223, 255, 0, 0.4);
+}
+
+@layer base {
+  body {
+    @apply bg-white text-[#1B1B1B] font-sans antialiased overflow-hidden select-none;
+  }
+}
+
+/* Custom utilities for glassmorphism */
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-float;
+  }
+  .glass-panel-dark {
+    @apply bg-black/40 backdrop-blur-md border border-white/10;
+  }
+}

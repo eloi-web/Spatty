@@ -1,0 +1,8 @@
+{
+  "name": "Gesture Gallery",
+  "description": "Navigate your memories with a wave of your hand. Upload your photos to wrap around you in a 3D sphere.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
