@@ -15,15 +15,17 @@ export function HandTracker({
 }: HandTrackerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const previousWrist = useRef<{x: number, y: number} | null>(null);
+
+  const previousWrist = useRef<{ x: number, y: number } | null>(null);
   const lastFullscreenTime = useRef<number>(0);
+  // Exponential moving average on gesture deltas for smooth output
+  const smoothedDelta = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!isEnabled) {
       if (videoRef.current && videoRef.current.srcObject) {
-         const stream = videoRef.current.srcObject as MediaStream;
-         stream.getTracks().forEach(t => t.stop());
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
       }
       return;
     }
@@ -51,19 +53,19 @@ export function HandTracker({
 
       hands.onResults((results: any) => {
         if (!canvasRef.current || !videoRef.current) return;
-        
+
         const videoWidth = videoRef.current.videoWidth;
         const videoHeight = videoRef.current.videoHeight;
-        
+
         canvasRef.current.width = videoWidth;
         canvasRef.current.height = videoHeight;
-        
+
         const canvasCtx = canvasRef.current.getContext('2d');
         if (!canvasCtx) return;
 
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        
+
         // Mirror the image
         canvasCtx.translate(canvasRef.current.width, 0);
         canvasCtx.scale(-1, 1);
@@ -71,16 +73,16 @@ export function HandTracker({
 
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
           const landmarks = results.multiHandLandmarks[0];
-          
+
           // Draw skeleton
           // @ts-ignore
-          window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, {color: '#DFFF00', lineWidth: 3});
+          window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, { color: '#DFFF00', lineWidth: 3 });
           // @ts-ignore
-          window.drawLandmarks(canvasCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 2});
+          window.drawLandmarks(canvasCtx, landmarks, { color: '#ffffff', lineWidth: 1, radius: 2 });
 
           analyzeGestures(landmarks);
         } else {
-           previousWrist.current = null;
+          previousWrist.current = null;
         }
         canvasCtx.restore();
       });
@@ -91,15 +93,15 @@ export function HandTracker({
           activeCamera = new window.Camera(videoRef.current, {
             onFrame: async () => {
               if (videoRef.current) {
-                await hands.send({image: videoRef.current});
+                await hands.send({ image: videoRef.current });
               }
             },
-            width: 320,
-            height: 240
+            width: 640,
+            height: 480
           });
-          
+
           activeCamera.start().catch((err: any) => {
-             console.error('Camera start error:', err);
+            console.error('Camera start error:', err);
           });
         } catch (err: any) {
           console.error('Camera init error:', err);
@@ -117,7 +119,7 @@ export function HandTracker({
   const analyzeGestures = (landmarks: any[]) => {
     const now = Date.now();
     const wrist = landmarks[0];
-    
+
     // Finger states
     const thumbTip = landmarks[4];
     const indexTip = landmarks[8];
@@ -136,15 +138,20 @@ export function HandTracker({
 
     // 1. Rotation (Two fingers up: Index + Middle)
     if (isIndexUp && isMiddleUp && isRingDown && isPinkyDown) {
-       if (previousWrist.current) {
-          const dx = wrist.x - previousWrist.current.x;
-          const dy = wrist.y - previousWrist.current.y;
-          // Scale Delta for smooth movement, X is mirrored, move Right -> wrist.x increases
-          onInteraction('rotate', { dx: dx * 2, dy: dy * 2 });
-       }
-       previousWrist.current = { x: wrist.x, y: wrist.y };
+      if (previousWrist.current) {
+        const rawDx = wrist.x - previousWrist.current.x;
+        const rawDy = wrist.y - previousWrist.current.y;
+        // Exponential moving average — smooths out landmark noise
+        smoothedDelta.current.x = smoothedDelta.current.x * 0.6 + rawDx * 0.4;
+        smoothedDelta.current.y = smoothedDelta.current.y * 0.6 + rawDy * 0.4;
+        onInteraction('rotate', { dx: smoothedDelta.current.x * 3, dy: smoothedDelta.current.y * 3 });
+      }
+      previousWrist.current = { x: wrist.x, y: wrist.y };
     } else {
-       previousWrist.current = null;
+      previousWrist.current = null;
+      // Decay smoothed delta so next gesture starts fresh
+      smoothedDelta.current.x *= 0.5;
+      smoothedDelta.current.y *= 0.5;
     }
 
     // 2. Zoom (Pinch distance between Thumb and Index)
@@ -152,32 +159,27 @@ export function HandTracker({
     // Actually, open hand = 4 fingers up -> zoom
     const isRingUp = ringTip.y < ringPip.y;
     const isPinkyUp = pinkyTip.y < pinkyPip.y;
-    
+
     if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-       // Open palm -> Zoom Out (pushing away) or we use pinch
+      // Open palm -> Zoom Out (pushing away) or we use pinch
     }
 
     const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
     // Pinch distance usually ranges `0.02` (closed) to `0.25` (fully spread)
     if (!isMiddleUp && !isRingUp) {
       if (pinchDist > 0.15) {
-         onInteraction('zoom', 0.02); // Zoom In
+        onInteraction('zoom', 0.02); // Zoom In
       } else if (pinchDist < 0.06) {
-         onInteraction('zoom', -0.02); // Zoom Out
+        onInteraction('zoom', -0.02); // Zoom Out
       }
     }
 
-    // 3. Peace Sign for Fullscreen (Need a cool-down so it doesn't trigger 60x a sec)
-    if (isIndexUp && isMiddleUp && isRingDown && isPinkyDown) {
-       // Actually 2 fingers up is our rotate. So Fullscreen needs another gesture.
-       // E.g. Thumb + Pinky up (Shaka sign)
-       const isThumbUp = thumbTip.y < landmarks[3].y || thumbTip.x > landmarks[3].x;
-       if (isThumbUp && isPinkyUp && !isIndexUp && !isMiddleUp) {
-          if (now - lastFullscreenTime.current > 1000) {
-             onInteraction('fullscreen');
-             lastFullscreenTime.current = now;
-          }
-       }
+    // 3. Fullscreen: Shaka sign — only pinky up, index + middle + ring all down
+    if (isPinkyUp && !isIndexUp && !isMiddleUp && isRingDown) {
+      if (now - lastFullscreenTime.current > 1500) {
+        onInteraction('fullscreen');
+        lastFullscreenTime.current = now;
+      }
     }
   };
 
@@ -189,23 +191,23 @@ export function HandTracker({
       )}>
         {!isEnabled ? (
           <button onClick={onToggleEnabled} className="w-full h-full flex items-center justify-center text-[#1b1b1b] hover:text-black transition-colors">
-             <LucideCameraOff size={20} />
+            <LucideCameraOff size={20} />
           </button>
         ) : (
           <>
-            <video 
-              ref={videoRef} 
-              className="hidden" 
-              playsInline 
-              muted 
+            <video
+              ref={videoRef}
+              className="hidden"
+              playsInline
+              muted
             />
-            <canvas 
-              ref={canvasRef} 
+            <canvas
+              ref={canvasRef}
               className="absolute inset-0 w-full h-full object-cover"
             />
-            
+
             {/* Close button overlay */}
-            <button 
+            <button
               onClick={onToggleEnabled}
               className="absolute top-2 right-2 bg-black/20 hover:bg-black/40 p-2 rounded-full text-white hover:text-[#DFFF00] transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
             >
@@ -217,10 +219,10 @@ export function HandTracker({
 
       {/* Fallback Mobile Controls */}
       <div className="flex items-center gap-2 md:hidden">
-        <button onClick={() => onInteraction('rotate', {dx: 0.1, dy: 0})} className="glass-panel p-2 rounded-full"><RotateCcw size={16} className="-scale-x-100" /></button>
+        <button onClick={() => onInteraction('rotate', { dx: 0.1, dy: 0 })} className="glass-panel p-2 rounded-full"><RotateCcw size={16} className="-scale-x-100" /></button>
         <button onClick={() => onInteraction('zoom', -0.1)} className="glass-panel px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider">OUT</button>
         <button onClick={() => onInteraction('zoom', 0.1)} className="glass-panel px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider">IN</button>
-        <button onClick={() => onInteraction('rotate', {dx: -0.1, dy: 0})} className="glass-panel p-2 rounded-full"><RotateCcw size={16} /></button>
+        <button onClick={() => onInteraction('rotate', { dx: -0.1, dy: 0 })} className="glass-panel p-2 rounded-full"><RotateCcw size={16} /></button>
         <button onClick={() => onInteraction('fullscreen')} className="glass-panel p-2 rounded-full"><Maximize size={16} /></button>
       </div>
     </div>
