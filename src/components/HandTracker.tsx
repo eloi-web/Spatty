@@ -16,10 +16,10 @@ export function HandTracker({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const previousWrist = useRef<{ x: number, y: number } | null>(null);
+
   const lastFullscreenTime = useRef<number>(0);
-  // Exponential moving average on gesture deltas for smooth output
-  const smoothedDelta = useRef({ x: 0, y: 0 });
+  // EMA on absolute palm position (ref-repo approach) — smoother than EMA on delta
+  const smoothedPalm = useRef({ x: 0.5, y: 0.5, active: false });
 
   useEffect(() => {
     if (!isEnabled) {
@@ -78,11 +78,11 @@ export function HandTracker({
           // @ts-ignore
           window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, { color: '#DFFF00', lineWidth: 3 });
           // @ts-ignore
-          window.drawLandmarks(canvasCtx, landmarks, { color: '#ffffff', lineWidth: 1, radius: 2 });
+          window.drawLandmarks(canvasCtx, landmarks, { color: '#ffffff', lineWidth: 1, radius: 5 });
 
           analyzeGestures(landmarks);
         } else {
-          previousWrist.current = null;
+          smoothedPalm.current.active = false;
         }
         canvasCtx.restore();
       });
@@ -118,55 +118,58 @@ export function HandTracker({
 
   const analyzeGestures = (landmarks: any[]) => {
     const now = Date.now();
-    const wrist = landmarks[0];
 
-    // Finger states
+    const wrist = landmarks[0];
     const thumbTip = landmarks[4];
     const indexTip = landmarks[8];
-    const indexPip = landmarks[6];
     const middleTip = landmarks[12];
-    const middlePip = landmarks[10];
     const ringTip = landmarks[16];
-    const ringPip = landmarks[14];
     const pinkyTip = landmarks[20];
-    const pinkyPip = landmarks[18];
+    const indexMCP = landmarks[5];
+    const middleMCP = landmarks[9];
+    const ringMCP = landmarks[13];
+    const pinkyMCP = landmarks[17];
 
-    const isIndexUp = indexTip.y < indexPip.y;
-    const isMiddleUp = middleTip.y < middlePip.y;
-    const isRingDown = ringTip.y > ringPip.y;
-    const isPinkyDown = pinkyTip.y > pinkyPip.y;
+    // Orientation-independent extension check:
+    // A finger is "extended" when its tip is clearly further from the wrist than its base knuckle (MCP).
+    // This works even when the hand is tilted sideways, unlike raw Y comparisons.
+    const d = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y);
+    const isExtended = (tip: any, mcp: any) => d(tip, wrist) > d(mcp, wrist) * 1.5;
+    const isCurled = (tip: any, mcp: any) => d(tip, wrist) < d(mcp, wrist) * 1.3;
+
+    const isIndexUp = isExtended(indexTip, indexMCP);
+    const isMiddleUp = isExtended(middleTip, middleMCP);
+    const isRingDown = isCurled(ringTip, ringMCP);
+    const isPinkyUp = isExtended(pinkyTip, pinkyMCP);
 
     // 1. Rotation (Two fingers up: Index + Middle)
-    if (isIndexUp && isMiddleUp && isRingDown && isPinkyDown) {
-      if (previousWrist.current) {
-        const rawDx = wrist.x - previousWrist.current.x;
-        const rawDy = wrist.y - previousWrist.current.y;
-        // Exponential moving average — smooths out landmark noise
-        smoothedDelta.current.x = smoothedDelta.current.x * 0.6 + rawDx * 0.4;
-        smoothedDelta.current.y = smoothedDelta.current.y * 0.6 + rawDy * 0.4;
-        onInteraction('rotate', { dx: smoothedDelta.current.x * 3, dy: smoothedDelta.current.y * 3 });
+    if (isIndexUp && isMiddleUp) {
+      // Use landmark 9 (middle finger MCP) — more stable than wrist (landmark 0)
+      const palm = landmarks[9];
+      const mirroredX = 1 - palm.x; // mirror so moving right = rotating right
+      const alpha = 0.4; // same as reference repo
+
+      if (!smoothedPalm.current.active) {
+        // First frame: initialize without sending rotation
+        smoothedPalm.current = { x: mirroredX, y: palm.y, active: true };
+      } else {
+        const prevX = smoothedPalm.current.x;
+        const prevY = smoothedPalm.current.y;
+        // Smooth the absolute position, then derive delta from it
+        smoothedPalm.current.x += (mirroredX - prevX) * alpha;
+        smoothedPalm.current.y += (palm.y - prevY) * alpha;
+        const dx = smoothedPalm.current.x - prevX;
+        const dy = smoothedPalm.current.y - prevY;
+        onInteraction('rotate', { dx: dx * 5, dy: dy * 5 });
       }
-      previousWrist.current = { x: wrist.x, y: wrist.y };
     } else {
-      previousWrist.current = null;
-      // Decay smoothed delta so next gesture starts fresh
-      smoothedDelta.current.x *= 0.5;
-      smoothedDelta.current.y *= 0.5;
+      smoothedPalm.current.active = false;
     }
 
-    // 2. Zoom (Pinch distance between Thumb and Index)
-    // Only zoom if we are not doing a peace sign to rotate, or we can allow both
-    // Actually, open hand = 4 fingers up -> zoom
-    const isRingUp = ringTip.y < ringPip.y;
-    const isPinkyUp = pinkyTip.y < pinkyPip.y;
-
-    if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-      // Open palm -> Zoom Out (pushing away) or we use pinch
-    }
-
+    // 2. Zoom: pinch (thumb + index close) when NOT in rotation gesture
+    const isRingUp = isExtended(ringTip, ringMCP);
     const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
-    // Pinch distance usually ranges `0.02` (closed) to `0.25` (fully spread)
-    if (!isMiddleUp && !isRingUp) {
+    if (!isIndexUp && !isMiddleUp) {
       if (pinchDist > 0.15) {
         onInteraction('zoom', 0.02); // Zoom In
       } else if (pinchDist < 0.06) {
