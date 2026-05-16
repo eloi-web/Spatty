@@ -124,7 +124,7 @@ export default function App() {
         </div>
 
         <div className="flex flex-col items-center gap-3">
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight uppercase pointer-events-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight uppercase pointer-events-auto" >
             SPATTY
           </h1>
           {/* View Mode Switcher */}
