@@ -7,7 +7,7 @@ import { Upload } from 'lucide-react';
 import { cn } from './lib/utils';
 
 // Generate 80 placeholder images from Unsplash for a denser sphere
-const DEFAULT_IMAGES = Array.from({ length: 80 }).map((_, i) => 
+const DEFAULT_IMAGES = Array.from({ length: 80 }).map((_, i) =>
   `https://picsum.photos/seed/${i + 100}/600/800`
 );
 
@@ -17,14 +17,22 @@ export default function App() {
   const [images, setImages] = useState<string[]>(DEFAULT_IMAGES);
   const [isTrackingEnabled, setIsTrackingEnabled] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('sphere');
-  
+
   // Use refs for interactions to avoid re-renders on continuous 30fps inputs
   const interactionRef = useRef({
     rotationX: 0,
     rotationY: 0,
     zoomProgress: 0 // 0 = far, 1 = close
   });
-  
+
+  const switchMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    // Reset accumulated state so carry-over from the other mode doesn't break the new one
+    interactionRef.current.rotationX = 0;
+    interactionRef.current.rotationY = 0;
+    interactionRef.current.zoomProgress = 0;
+  }, []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleInteraction = useCallback((type: 'rotate' | 'zoom' | 'fullscreen', data?: any) => {
@@ -48,13 +56,13 @@ export default function App() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    
+
     const newImages = Array.from(files).map(file => URL.createObjectURL(file));
     setImages(prev => [...prev, ...newImages]);
-    
+
     // Reset input
     if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      fileInputRef.current.value = '';
     }
   };
 
@@ -72,25 +80,25 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-white text-[#1B1B1B] font-sans selection:bg-[#DFFF00] selection:text-black">
-      
+
       {/* 3D Canvas Background */}
-      <div 
+      <div
         className="absolute inset-0 cursor-grab active:cursor-grabbing"
         onMouseMove={handleDrag}
         onWheel={handleWheel}
       >
-        <Canvas camera={{ position: [0, 0, 80], fov: 45 }}>
+        <Canvas camera={{ position: [0, 0, 120], fov: 45 }}>
           <ambientLight intensity={1.5} />
           {viewMode === 'sphere' ? (
-            <SphereGallery 
-              images={images} 
+            <SphereGallery
+              images={images}
               interactionRef={interactionRef}
             />
           ) : (
-             <ThroughGallery 
-               images={images}
-               interactionRef={interactionRef}
-             />
+            <ThroughGallery
+              images={images}
+              interactionRef={interactionRef}
+            />
           )}
         </Canvas>
       </div>
@@ -98,15 +106,15 @@ export default function App() {
       {/* Floating Header */}
       <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between pointer-events-none gap-4">
         <div className="w-full md:w-auto flex justify-center md:justify-start">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            multiple 
-            accept="image/jpeg, image/png, image/webp" 
-            className="hidden" 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            multiple
+            accept="image/jpeg, image/png, image/webp"
+            className="hidden"
           />
-          <button 
+          <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-black/10 bg-white/80 backdrop-blur-md shadow-float hover:shadow-active transition-all font-semibold text-sm tracking-wide pointer-events-auto"
           >
@@ -116,30 +124,30 @@ export default function App() {
         </div>
 
         <div className="flex flex-col items-center gap-3">
-           <h1 className="text-xl md:text-2xl font-bold tracking-tight uppercase pointer-events-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight uppercase pointer-events-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
             SPATTY
-           </h1>
-           {/* View Mode Switcher */}
-           <div className="flex items-center bg-gray-100/80 backdrop-blur p-1 rounded-full shadow-inner pointer-events-auto border border-black/5">
-             <button
-               onClick={() => setViewMode('sphere')}
-               className={cn(
-                 "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
-                 viewMode === 'sphere' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
-               )}
-             >
-               Spatial Sphere
-             </button>
-             <button
-               onClick={() => setViewMode('through')}
-               className={cn(
-                 "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
-                 viewMode === 'through' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
-               )}
-             >
-               Through View
-             </button>
-           </div>
+          </h1>
+          {/* View Mode Switcher */}
+          <div className="flex items-center bg-gray-100/80 backdrop-blur p-1 rounded-full shadow-inner pointer-events-auto border border-black/5">
+            <button
+              onClick={() => switchMode('sphere')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
+                viewMode === 'sphere' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
+              )}
+            >
+              Spatial Sphere
+            </button>
+            <button
+              onClick={() => switchMode('through')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
+                viewMode === 'through' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
+              )}
+            >
+              Through View
+            </button>
+          </div>
         </div>
       </header>
 
@@ -153,7 +161,7 @@ export default function App() {
       </div>
 
       {/* Hand Tracker Component */}
-      <HandTracker 
+      <HandTracker
         isEnabled={isTrackingEnabled}
         onToggleEnabled={() => setIsTrackingEnabled(!isTrackingEnabled)}
         onInteraction={handleInteraction}
