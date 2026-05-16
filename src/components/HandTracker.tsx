@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { cn } from '../lib/utils';
 import { LucideCameraOff, Maximize, RotateCcw } from 'lucide-react';
 
@@ -167,7 +167,6 @@ export function HandTracker({
     }
 
     // 2. Zoom: pinch (thumb + index close) when NOT in rotation gesture
-    const isRingUp = isExtended(ringTip, ringMCP);
     const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
     if (!isIndexUp && !isMiddleUp) {
       if (pinchDist > 0.15) {
