@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { SphereGallery } from './components/SphereGallery';
-import { ThroughGallery } from './components/ThroughGallery';
+import { MorphingGallery } from './components/MorphingGallery';
+import { SceneEnvironment } from './components/SceneEnvironment';
 import { HandTracker } from './components/HandTracker';
 import { Upload } from 'lucide-react';
 import { cn } from './lib/utils';
@@ -13,10 +13,37 @@ const DEFAULT_IMAGES = Array.from({ length: 80 }).map((_, i) =>
 
 type ViewMode = 'sphere' | 'through';
 
+/** Extracts the average (dominant) RGB colour from an image URL via a tiny canvas. */
+function extractDominantColor(url: string): Promise<[number, number, number]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 8;
+      canvas.height = 8;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve([200, 200, 200]); return; }
+      ctx.drawImage(img, 0, 0, 8, 8);
+      const { data } = ctx.getImageData(0, 0, 8, 8);
+      let r = 0, g = 0, b = 0;
+      const px = data.length / 4;
+      for (let i = 0; i < data.length; i += 4) {
+        r += data[i]; g += data[i + 1]; b += data[i + 2];
+      }
+      resolve([Math.round(r / px), Math.round(g / px), Math.round(b / px)]);
+    };
+    img.onerror = () => resolve([200, 200, 200]);
+    img.src = url;
+  });
+}
+
 export default function App() {
   const [images, setImages] = useState<string[]>(DEFAULT_IMAGES);
   const [isTrackingEnabled, setIsTrackingEnabled] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('sphere');
+  const [envColor, setEnvColor] = useState<[number, number, number]>([255, 255, 255]);
+  const colorCache = useRef(new Map<string, [number, number, number]>());
 
   // Use refs for interactions to avoid re-renders on continuous 30fps inputs
   const interactionRef = useRef({
@@ -78,6 +105,15 @@ export default function App() {
     interactionRef.current.zoomProgress = Math.max(0, Math.min(1, interactionRef.current.zoomProgress));
   };
 
+  const handleNearestImage = useCallback((url: string) => {
+    const cached = colorCache.current.get(url);
+    if (cached) { setEnvColor(cached); return; }
+    extractDominantColor(url).then(color => {
+      colorCache.current.set(url, color);
+      setEnvColor(color);
+    });
+  }, []);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-white text-[#1B1B1B] font-sans selection:bg-[#DFFF00] selection:text-black">
 
@@ -88,18 +124,14 @@ export default function App() {
         onWheel={handleWheel}
       >
         <Canvas camera={{ position: [0, 0, 120], fov: 45 }}>
+          <SceneEnvironment envColor={envColor} />
           <ambientLight intensity={1.5} />
-          {viewMode === 'sphere' ? (
-            <SphereGallery
-              images={images}
-              interactionRef={interactionRef}
-            />
-          ) : (
-            <ThroughGallery
-              images={images}
-              interactionRef={interactionRef}
-            />
-          )}
+          <MorphingGallery
+            mode={viewMode}
+            images={images}
+            interactionRef={interactionRef}
+            onNearestImage={handleNearestImage}
+          />
         </Canvas>
       </div>
 
