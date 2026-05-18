@@ -29,10 +29,17 @@ export function PostEffects() {
             4.5,
             THREE.MathUtils.smoothstep(distToImages, 30, 85)
         );
-        focalLength = { 0.022}
-        bokehScale = { 3}
-        height = { 480}
+    });
+
+    return (
+        <EffectComposer multisampling={4}>
+            <DepthOfField
+                ref={dofRef}
+                focusDistance={0.08}
+                focalLength={0.022}
+                bokehScale={3}
+                height={480}
             />
-        </EffectComposer >
+        </EffectComposer>
     );
 }
