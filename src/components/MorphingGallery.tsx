@@ -14,6 +14,7 @@ export interface MorphingGalleryProps {
         zoomProgress: number;
     }>;
     onNearestImage?: (url: string) => void;
+    rotationOutRef?: React.MutableRefObject<{ x: number; y: number }>;
 }
 
 const SPHERE_RADIUS = 35;
@@ -40,6 +41,7 @@ export function MorphingGallery({
     images,
     interactionRef,
     onNearestImage,
+    rotationOutRef,
 }: MorphingGalleryProps) {
 
     // ─── Sphere base positions (un-rotated, Fibonacci spiral) ─────────────
@@ -168,6 +170,12 @@ export function MorphingGallery({
                 const url = imagesRef.current[best];
                 if (url) cb(url);
             }
+        }
+
+        // ── 7. Expose smoothed rotation for external consumers (spatial audio) ──
+        if (rotationOutRef) {
+            rotationOutRef.current.x = smoothRot.current.x;
+            rotationOutRef.current.y = smoothRot.current.y;
         }
     });
 
