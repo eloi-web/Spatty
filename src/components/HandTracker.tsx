@@ -1,6 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { LucideCameraOff, Maximize, RotateCcw } from 'lucide-react';
+
+// ─── Snap-position helpers ───────────────────────────────────────────────────
+type SnapPos = 'bottom-center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+const SNAP_POSITIONS: SnapPos[] = ['bottom-center', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
+const SNAP_MARGIN = 24; // px from edges
+const SNAP_TRANSITION = 'top 0.45s cubic-bezier(0.34,1.56,0.64,1), left 0.45s cubic-bezier(0.34,1.56,0.64,1)';
+
+function getSnapPx(
+  snap: SnapPos, vw: number, vh: number, w: number, h: number
+): { top: number; left: number } {
+  switch (snap) {
+    case 'top-left': return { top: SNAP_MARGIN, left: SNAP_MARGIN };
+    case 'top-right': return { top: SNAP_MARGIN, left: vw - w - SNAP_MARGIN };
+    case 'bottom-left': return { top: vh - h - SNAP_MARGIN, left: SNAP_MARGIN };
+    case 'bottom-right': return { top: vh - h - SNAP_MARGIN, left: vw - w - SNAP_MARGIN };
+    case 'bottom-center': return { top: vh - h - SNAP_MARGIN, left: Math.round((vw - w) / 2) };
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface HandTrackerProps {
   isEnabled: boolean;
@@ -20,6 +39,135 @@ export function HandTracker({
   const lastFullscreenTime = useRef<number>(0);
   // EMA on absolute palm position (ref-repo approach) — smoother than EMA on delta
   const smoothedPalm = useRef({ x: 0.5, y: 0.5, active: false });
+
+  // ─── Drag-to-snap state ────────────────────────────────────────────────────
+  const [snapPos, setSnapPos] = useState<SnapPos>('bottom-center');
+  const snapRef = useRef<SnapPos>('bottom-center');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Enable CSS transition once (avoids React fighting with imperative updates)
+  useEffect(() => {
+    if (wrapRef.current) wrapRef.current.style.transition = SNAP_TRANSITION;
+  }, []);
+
+  // Reposition when the widget size changes (enabled ↔ disabled)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const isMd = vw >= 768;
+    const w = isEnabled ? (isMd ? 320 : 240) : 48;
+    const h = isEnabled ? (isMd ? 240 : 180) : 48;
+    const { top, left } = getSnapPx(snapRef.current, vw, vh, w, h);
+    el.style.top = `${top}px`;
+    el.style.left = `${left}px`;
+  }, [isEnabled]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isEnabled) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    e.preventDefault();
+
+    el.style.transition = 'none';
+    el.style.cursor = 'grabbing';
+
+    const startMX = e.clientX, startMY = e.clientY;
+    const rect = el.getBoundingClientRect();
+    const baseLeft = rect.left, baseTop = rect.top;
+
+    const onMove = (ev: MouseEvent) => {
+      el.style.transform = `translate(${ev.clientX - startMX}px,${ev.clientY - startMY}px)`;
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      el.style.cursor = 'grab';
+
+      const dx = ev.clientX - startMX, dy = ev.clientY - startMY;
+      const curLeft = baseLeft + dx, curTop = baseTop + dy;
+
+      // Find nearest snap position
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const isMd = vw >= 768;
+      const w = isMd ? 320 : 240, h = isMd ? 240 : 180;
+      let nearest = snapRef.current, minDist = Infinity;
+      SNAP_POSITIONS.forEach(name => {
+        const sp = getSnapPx(name, vw, vh, w, h);
+        const d = Math.hypot(curLeft - sp.left, curTop - sp.top);
+        if (d < minDist) { minDist = d; nearest = name; }
+      });
+
+      const target = getSnapPx(nearest, vw, vh, w, h);
+      // Anchor to current drag position, then animate to snap
+      el.style.transform = '';
+      el.style.top = `${curTop}px`;
+      el.style.left = `${curLeft}px`;
+      void el.offsetHeight; // force reflow
+      el.style.transition = SNAP_TRANSITION;
+      el.style.top = `${target.top}px`;
+      el.style.left = `${target.left}px`;
+
+      snapRef.current = nearest;
+      setSnapPos(nearest);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [isEnabled]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isEnabled) return;
+    const el = wrapRef.current;
+    if (!el) return;
+
+    el.style.transition = 'none';
+    const t0 = e.touches[0];
+    const startMX = t0.clientX, startMY = t0.clientY;
+    const rect = el.getBoundingClientRect();
+    const baseLeft = rect.left, baseTop = rect.top;
+
+    const onMove = (ev: TouchEvent) => {
+      const t = ev.touches[0];
+      el.style.transform = `translate(${t.clientX - startMX}px,${t.clientY - startMY}px)`;
+    };
+
+    const onEnd = (ev: TouchEvent) => {
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+
+      const t = ev.changedTouches[0];
+      const dx = t.clientX - startMX, dy = t.clientY - startMY;
+      const curLeft = baseLeft + dx, curTop = baseTop + dy;
+
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const isMd = vw >= 768;
+      const w = isMd ? 320 : 240, h = isMd ? 240 : 180;
+      let nearest = snapRef.current, minDist = Infinity;
+      SNAP_POSITIONS.forEach(name => {
+        const sp = getSnapPx(name, vw, vh, w, h);
+        const d = Math.hypot(curLeft - sp.left, curTop - sp.top);
+        if (d < minDist) { minDist = d; nearest = name; }
+      });
+
+      const target = getSnapPx(nearest, vw, vh, w, h);
+      el.style.transform = '';
+      el.style.top = `${curTop}px`;
+      el.style.left = `${curLeft}px`;
+      void el.offsetHeight;
+      el.style.transition = SNAP_TRANSITION;
+      el.style.top = `${target.top}px`;
+      el.style.left = `${target.left}px`;
+
+      snapRef.current = nearest;
+      setSnapPos(nearest);
+    };
+
+    el.addEventListener('touchmove', onMove, { passive: true });
+    el.addEventListener('touchend', onEnd);
+  }, [isEnabled]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!isEnabled) return;
@@ -194,49 +342,71 @@ export function HandTracker({
     }
   };
 
-  return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-      <div className={cn(
-        "relative rounded-xl overflow-hidden transition-all duration-300",
-        isEnabled ? "w-[240px] h-[180px] md:w-[320px] md:h-[240px] ring-2 ring-[#DFFF00]/50" : "w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-black/5"
-      )}>
-        {!isEnabled ? (
-          <button onClick={onToggleEnabled} className="w-full h-full flex items-center justify-center text-[#1b1b1b] hover:text-black transition-colors">
-            <LucideCameraOff size={20} />
-          </button>
-        ) : (
-          <>
-            <video
-              ref={videoRef}
-              className="hidden"
-              playsInline
-              muted
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+  // Compute initial inline position for first render (transition kicks in after mount)
+  const _vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  const _vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const _isMd = _vw >= 768;
+  const _w = isEnabled ? (_isMd ? 320 : 240) : 48;
+  const _h = isEnabled ? (_isMd ? 240 : 180) : 48;
+  const _pos = getSnapPx(snapPos, _vw, _vh, _w, _h);
 
-            {/* Close button overlay */}
+  return (
+    <>
+      {/* Draggable camera widget */}
+      <div
+        ref={wrapRef}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        style={{
+          position: 'absolute',
+          top: _pos.top,
+          left: _pos.left,
+          zIndex: 50,
+          cursor: isEnabled ? 'grab' : 'default',
+          userSelect: 'none',
+          touchAction: 'none',
+        }}
+      >
+        <div className={cn(
+          "relative rounded-xl overflow-hidden transition-[width,height] duration-300",
+          isEnabled
+            ? "w-[240px] h-[180px] md:w-[320px] md:h-[240px] ring-2 ring-[#DFFF00]/50"
+            : "w-12 h-12 flex items-center justify-center hover:bg-black/5"
+        )}>
+          {!isEnabled ? (
             <button
               onClick={onToggleEnabled}
-              className="absolute top-2 right-2 bg-black/20 hover:bg-black/40 p-2 rounded-full text-white hover:text-[#DFFF00] transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+              className="w-full h-full flex items-center justify-center text-[#1b1b1b] hover:text-black transition-colors"
             >
-              <LucideCameraOff size={16} />
+              <LucideCameraOff size={20} />
             </button>
-          </>
-        )}
+          ) : (
+            <>
+              <video ref={videoRef} className="hidden" playsInline muted />
+              <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
+
+              {/* Close button — stopPropagation so it doesn't start a drag */}
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={onToggleEnabled}
+                className="absolute top-2 right-2 bg-black/20 hover:bg-black/40 p-2 rounded-full text-white hover:text-[#DFFF00] transition-colors opacity-0 hover:opacity-100 focus:opacity-100"
+              >
+                <LucideCameraOff size={16} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Fallback Mobile Controls */}
-      <div className="flex items-center gap-2 md:hidden">
+      {/* Fallback Mobile Controls — always bottom-center, not draggable */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 md:hidden" style={{ zIndex: 50 }}>
         <button onClick={() => onInteraction('rotate', { dx: 0.1, dy: 0 })} className="glass-panel p-2 rounded-full"><RotateCcw size={16} className="-scale-x-100" /></button>
         <button onClick={() => onInteraction('zoom', -0.1)} className="glass-panel px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider">OUT</button>
         <button onClick={() => onInteraction('zoom', 0.1)} className="glass-panel px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider">IN</button>
         <button onClick={() => onInteraction('rotate', { dx: -0.1, dy: 0 })} className="glass-panel p-2 rounded-full"><RotateCcw size={16} /></button>
         <button onClick={() => onInteraction('fullscreen')} className="glass-panel p-2 rounded-full"><Maximize size={16} /></button>
       </div>
-    </div>
+    </>
   );
 }
 
