@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { MorphingGallery } from './components/MorphingGallery';
 import { SceneEnvironment } from './components/SceneEnvironment';
+import { PostEffects } from './components/PostEffects';
+import { SpatialAudio } from './components/SpatialAudio';
 import { HandTracker } from './components/HandTracker';
 import { Upload } from 'lucide-react';
 import { cn } from './lib/utils';
@@ -44,6 +46,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('sphere');
   const [envColor, setEnvColor] = useState<[number, number, number]>([255, 255, 255]);
   const colorCache = useRef(new Map<string, [number, number, number]>());
+  const sphereRotRef = useRef({ x: 0, y: 0 });
 
   // Use refs for interactions to avoid re-renders on continuous 30fps inputs
   const interactionRef = useRef({
@@ -131,7 +134,10 @@ export default function App() {
             images={images}
             interactionRef={interactionRef}
             onNearestImage={handleNearestImage}
+            rotationOutRef={sphereRotRef}
           />
+          <SpatialAudio rotationOutRef={sphereRotRef} />
+          <PostEffects />
         </Canvas>
       </div>
 
