@@ -22,22 +22,21 @@ export function HandTracker({
   const smoothedPalm = useRef({ x: 0.5, y: 0.5, active: false });
 
   useEffect(() => {
-    if (!isEnabled) {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(t => t.stop());
-      }
-      return;
-    }
+    if (!isEnabled) return;
 
+    let cancelled = false;
     let activeCamera: any = null;
 
     const setupMediaPipe = async () => {
-      // @ts-ignore
-      if (!window.Hands || !window.Camera || !window.drawConnectors || !window.drawLandmarks) {
-        setTimeout(setupMediaPipe, 1000);
-        return;
+      // Poll every 100ms instead of 1000ms — scripts usually load well within 100ms
+      while (
+        // @ts-ignore
+        !window.Hands || !window.Camera || !window.drawConnectors || !window.drawLandmarks
+      ) {
+        if (cancelled) return;
+        await new Promise(r => setTimeout(r, 100));
       }
+      if (cancelled) return;
 
       // @ts-ignore
       const hands = new window.Hands({
@@ -87,6 +86,10 @@ export function HandTracker({
         canvasCtx.restore();
       });
 
+      // Pre-warm the model before starting the camera — eliminates first-frame lag
+      await hands.initialize();
+      if (cancelled) return;
+
       if (videoRef.current) {
         try {
           // @ts-ignore
@@ -100,19 +103,25 @@ export function HandTracker({
             height: 480
           });
 
-          activeCamera.start().catch((err: any) => {
-            console.error('Camera start error:', err);
-          });
+          await activeCamera.start();
         } catch (err: any) {
-          console.error('Camera init error:', err);
+          console.error('Camera start error:', err);
         }
       }
     };
 
-    setupMediaPipe();
+    setupMediaPipe().catch(console.error);
 
     return () => {
-      if (activeCamera) activeCamera.stop();
+      cancelled = true;
+      if (activeCamera) {
+        activeCamera.stop();
+      }
+      // Stop the webcam hardware immediately so the indicator light turns off
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
     };
   }, [isEnabled]);
 
