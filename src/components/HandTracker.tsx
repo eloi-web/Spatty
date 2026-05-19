@@ -370,7 +370,7 @@ export function HandTracker({
         <div className={cn(
           "relative rounded-xl overflow-hidden transition-[width,height] duration-300",
           isEnabled
-            ? "w-[240px] h-[180px] md:w-[320px] md:h-[240px] ring-2 ring-[#DFFF00]/50"
+            ? "w-60 h-45 md:w-[320px] md:h-60 ring-2 ring-brand-accent/50"
             : "w-12 h-12 flex items-center justify-center hover:bg-black/5"
         )}>
           {!isEnabled ? (
@@ -385,11 +385,11 @@ export function HandTracker({
               <video ref={videoRef} className="hidden" playsInline muted />
               <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
 
-              {/* Close button — stopPropagation so it doesn't start a drag */}
+              {/* Close button — always visible so touch users can find it */}
               <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={onToggleEnabled}
-                className="absolute top-2 right-2 bg-black/20 hover:bg-black/40 p-2 rounded-full text-white hover:text-[#DFFF00] transition-colors opacity-0 hover:opacity-100 focus:opacity-100"
+                className="absolute top-2 right-2 bg-black/40 hover:bg-black/60 p-2 rounded-full text-white hover:text-brand-accent transition-colors"
               >
                 <LucideCameraOff size={16} />
               </button>
