@@ -10,7 +10,7 @@ import { cn } from './lib/utils';
 
 // Generate 80 placeholder images from Unsplash for a denser sphere
 const DEFAULT_IMAGES = Array.from({ length: 80 }).map((_, i) =>
-  `https://picsum.photos/seed/${i + 100}/600/800`
+  `https://picsum.photos/seed/${i + 100}/400/600`
 );
 
 type ViewMode = 'sphere' | 'through';
@@ -118,7 +118,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-white text-[#1B1B1B] font-sans selection:bg-[#DFFF00] selection:text-black">
+    <div className="relative w-screen h-screen overflow-hidden bg-white text-brand-primary font-sans selection:bg-brand-accent selection:text-black">
 
       {/* 3D Canvas Background */}
       <div
@@ -126,7 +126,7 @@ export default function App() {
         onMouseMove={handleDrag}
         onWheel={handleWheel}
       >
-        <Canvas camera={{ position: [0, 0, 120], fov: 45 }}>
+        <Canvas camera={{ position: [0, 0, 150], fov: 45 }}>
           <SceneEnvironment envColor={envColor} />
           <ambientLight intensity={1.5} />
           <MorphingGallery
@@ -141,61 +141,59 @@ export default function App() {
         </Canvas>
       </div>
 
-      {/* Floating Header */}
-      <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between pointer-events-none gap-4">
-        <div className="w-full md:w-auto flex justify-center md:justify-start">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            multiple
-            accept="image/jpeg, image/png, image/webp"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-black/10 bg-white/80 backdrop-blur-md shadow-float hover:shadow-active transition-all font-semibold text-sm tracking-wide pointer-events-auto"
-          >
-            <Upload size={16} />
-            <span>UPLOAD GALLERY</span>
-          </button>
-        </div>
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        multiple
+        accept="image/jpeg, image/png, image/webp"
+        className="hidden"
+      />
 
-        <div className="flex flex-col items-center gap-3">
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight uppercase pointer-events-auto" >
-            SPATTY
-          </h1>
-          {/* View Mode Switcher */}
-          <div className="flex items-center bg-gray-100/80 backdrop-blur p-1 rounded-full shadow-inner pointer-events-auto border border-black/5">
-            <button
-              onClick={() => switchMode('sphere')}
-              className={cn(
-                "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
-                viewMode === 'sphere' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
-              )}
-            >
-              Spatial Sphere
-            </button>
-            <button
-              onClick={() => switchMode('through')}
-              className={cn(
-                "flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all",
-                viewMode === 'through' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
-              )}
-            >
-              Through View
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Legacy mobile fallback hidden, just keeping hints for desktop design reference */}
-      <div className="absolute top-[88px] md:top-28 left-6 md:left-10 hidden md:block text-[#1B1B1B]/40 text-[10px] uppercase tracking-widest font-bold pointer-events-none">
-        DRAG TO ROTATE • SCROLL TO ZOOM
+      {/* Title — top left */}
+      <div className="absolute top-0 left-0 p-4 md:p-6 pointer-events-none">
+        <h1 className="text-lg md:text-2xl font-bold tracking-tight uppercase">
+          SPATTY
+        </h1>
+        <p className="hidden md:block mt-1.5 text-brand-primary/40 text-[10px] uppercase tracking-widest font-bold">
+          DRAG TO ROTATE • SCROLL TO ZOOM
+        </p>
+        <p className="hidden md:block mt-0.5 text-brand-primary/40 text-[10px] uppercase tracking-widest font-bold">
+          ✌️ DRAG = ROTATE • 🤏 PINCH = ZOOM
+        </p>
       </div>
 
-      <div className="absolute top-[108px] md:top-32 left-6 md:left-10 hidden md:block text-[#1B1B1B]/40 text-[10px] uppercase tracking-widest font-bold pointer-events-none">
-        HANDS: ✌️ DRAG = ROTATE • 🤏 PINCH = ZOOM
+      {/* Controls — top right */}
+      <div className="absolute top-0 right-0 p-4 md:p-6 flex flex-col items-end gap-2">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1.5 px-3 py-2 md:px-5 md:py-2.5 rounded-full border border-black/10 bg-white/80 backdrop-blur-md shadow-float hover:shadow-active transition-all font-semibold text-xs md:text-sm tracking-wide"
+        >
+          <Upload size={14} />
+          <span className="hidden sm:inline">UPLOAD</span>
+        </button>
+        {/* View Mode Switcher */}
+        <div className="flex items-center bg-gray-100/80 backdrop-blur p-1 rounded-full shadow-inner border border-black/5">
+          <button
+            onClick={() => switchMode('sphere')}
+            className={cn(
+              "px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-semibold tracking-wide transition-all",
+              viewMode === 'sphere' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
+            )}
+          >
+            Sphere
+          </button>
+          <button
+            onClick={() => switchMode('through')}
+            className={cn(
+              "px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-semibold tracking-wide transition-all",
+              viewMode === 'through' ? "bg-white text-black shadow-sm" : "text-black/50 hover:text-black/80"
+            )}
+          >
+            Tunnel
+          </button>
+        </div>
       </div>
 
       {/* Hand Tracker Component */}
