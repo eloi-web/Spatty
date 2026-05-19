@@ -31,8 +31,9 @@ export function PostEffects() {
         );
     });
 
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     return (
-        <EffectComposer multisampling={4}>
+        <EffectComposer multisampling={isMobile ? 0 : 4}>
             <DepthOfField
                 ref={dofRef}
                 focusDistance={0.08}
