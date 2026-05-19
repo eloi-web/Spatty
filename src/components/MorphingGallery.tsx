@@ -139,7 +139,7 @@ export function MorphingGallery({
         const zoom = interactionRef.current.zoomProgress;
         const tunnelLen = imagesRef.current.length * TUNNEL_SPACING;
 
-        const sphereCamZ = 120 - zoom * 140;
+        const sphereCamZ = 150 - zoom * 170;
         const tunnelCamZ = -(zoom * tunnelLen);
         const targetCamZ = THREE.MathUtils.lerp(sphereCamZ, tunnelCamZ, t);
         state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, targetCamZ, 0.065);
