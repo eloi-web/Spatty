@@ -1,6 +1,6 @@
 {
-  "name": "Gesture Gallery",
-  "description": "Navigate your memories with a wave of your hand. Upload your photos to wrap around you in a 3D sphere.",
+  "name": "Spatty",
+  "description": "Navigate your photos with hand gestures in 3D. Upload images to explore them as an interactive sphere or fly through a tunnel — powered by MediaPipe hand tracking.",
   "requestFramePermissions": [
     "camera"
   ],
